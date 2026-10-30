@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CricketLive — Real-time Score Dashboard</title>
+    <meta name="description" content="Live cricket score management system with ball-by-ball updates, player stats, and match summaries." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     TOP NAV
+══════════════════════════════════════════════════════════════════════════ -->
+<header class="nav">
+    <div class="nav-brand">
+        <span class="nav-icon">🏏</span>
+        <span class="nav-title">Cricket<span class="nav-accent">Live</span></span>
+    </div>
+    <div class="nav-center" id="live-ticker">Loading matches…</div>
+    <div class="nav-right">
+        <span class="badge-api" onclick="window.open('/api/matches','_blank')">REST API</span>
+        <span class="badge-sse" id="sse-badge">⚡ SSE</span>
+    </div>
+</header>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     MAIN LAYOUT
+══════════════════════════════════════════════════════════════════════════ -->
+<div class="layout">
+
+    <!-- ── Sidebar ──────────────────────────────────────────────────────────── -->
+    <aside class="sidebar">
+        <h2 class="sidebar-heading">Matches</h2>
+        <div id="match-list" class="match-list">
+            <div class="skeleton-card"></div>
+            <div class="skeleton-card"></div>
+            <div class="skeleton-card"></div>
+        </div>
+
+        <!-- Simulation Controls -->
+        <div class="controls-panel" id="controls-panel" style="display:none">
+            <h3 class="controls-title">⚙️ Simulate</h3>
+
+            <button class="btn btn-primary" id="btn-ball" onclick="doSimulateBall()">
+                <span class="btn-icon">▶</span> Simulate Ball
+            </button>
+
+            <button class="btn btn-secondary" id="btn-over" onclick="doSimulateOver()">
+                <span class="btn-icon">⏭</span> Simulate Over
+            </button>
+
+            <button class="btn btn-toggle" id="btn-auto" onclick="toggleAuto()">
+                <span class="btn-icon" id="auto-icon">🔴</span>
+                <span id="auto-label">Auto Simulate</span>
+            </button>
+
+            <div class="auto-speed">
+                <label>Speed</label>
+                <select id="speed-select" onchange="updateAutoSpeed()">
+                    <option value="2000">Normal (2s)</option>
+                    <option value="1000">Fast (1s)</option>
+                    <option value="500">Turbo (0.5s)</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Start Match Button (for upcoming) -->
+        <div id="start-panel" style="display:none;padding:1rem">
+            <button class="btn btn-start" id="btn-start" onclick="doStartMatch()">
+                🏏 Start Match
+            </button>
+        </div>
+    </aside>
+
+    <!-- ── Main Content ──────────────────────────────────────────────────────── -->
+    <main class="main-content">
+
+        <!-- Match Header -->
+        <section class="match-header" id="match-header">
+            <div class="header-placeholder">
+                <p>← Select a match to view live scores</p>
+            </div>
+        </section>
+
+        <!-- Tabs -->
+        <div class="tabs" id="tabs" style="display:none">
+            <button class="tab active" data-tab="live" onclick="switchTab('live')">📊 Live Score</button>
+            <button class="tab" data-tab="scorecard" onclick="switchTab('scorecard')">📋 Scorecard</button>
+            <button class="tab" data-tab="commentary" onclick="switchTab('commentary')">💬 Commentary</button>
+        </div>
+
+        <!-- Tab: Live Score -->
+        <section class="tab-content active" id="tab-live">
+
+            <!-- Current Batsmen -->
+            <div class="section-title">🏏 At The Crease</div>
+            <div class="batsmen-row" id="batsmen-row">
+                <div class="batsman-card" id="card-striker"></div>
+                <div class="batsman-card" id="card-nonstriker"></div>
+            </div>
+
+            <!-- Current Bowler -->
+            <div class="section-title">🎯 Current Bowler</div>
+            <div id="bowler-row"></div>
+
+            <!-- This Over -->
+            <div class="section-title">📍 This Over <span id="over-label" class="over-label"></span></div>
+            <div class="over-balls" id="over-balls"></div>
+
+            <!-- Partnership / Match Info -->
+            <div id="match-info-strip" class="info-strip"></div>
+        </section>
+
+        <!-- Tab: Scorecard -->
+        <section class="tab-content" id="tab-scorecard">
+            <div class="section-title">🏏 Batting</div>
+            <div class="table-wrap">
+                <table class="score-table" id="batting-table">
+                    <thead>
+                        <tr>
+                            <th>Batsman</th><th>Status</th>
+                            <th>R</th><th>B</th><th>4s</th><th>6s</th><th>SR</th>
+                        </tr>
+                    </thead>
+                    <tbody id="batting-body"></tbody>
+                </table>
+            </div>
+
+            <div class="section-title" style="margin-top:2rem">🎯 Bowling</div>
+            <div class="table-wrap">
+                <table class="score-table" id="bowling-table">
+                    <thead>
+                        <tr>
+                            <th>Bowler</th><th>O</th>
+                            <th>M</th><th>R</th><th>W</th><th>Econ</th><th>Wd</th><th>Nb</th>
+                        </tr>
+                    </thead>
+                    <tbody id="bowling-body"></tbody>
+                </table>
+            </div>
+
+            <!-- Innings 2 scorecard (if available) -->
+            <div id="innings2-scorecard"></div>
+        </section>
+
+        <!-- Tab: Commentary -->
+        <section class="tab-content" id="tab-commentary">
+            <div class="section-title">💬 Ball-by-Ball Commentary</div>
+            <div class="commentary-feed" id="commentary-feed">
+                <p class="commentary-empty">Select a live match and simulate balls to see commentary.</p>
+            </div>
+        </section>
+
+    </main>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     TOAST NOTIFICATION
+══════════════════════════════════════════════════════════════════════════ -->
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
